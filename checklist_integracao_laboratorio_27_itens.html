@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Checklist - Integração Laboratorial</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--ok:#16a34a;--warn:#d97706;--bad:#dc2626}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
+.container{max-width:1220px;margin:0 auto;padding:24px}.header{background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border-radius:18px;padding:28px;margin-bottom:18px}
+.header h1{margin:0 0 8px;font-size:30px}.header p{margin:0;opacity:.95;line-height:1.5}.connection{margin-top:14px;display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);padding:8px 11px;border-radius:999px;font-size:13px}.connection-dot{width:9px;height:9px;border-radius:50%;background:#fbbf24}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}.sum{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}.sum b{font-size:24px;display:block;margin-bottom:4px}.sum span{color:var(--muted);font-size:13px}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}.btn{border:0;border-radius:10px;padding:11px 15px;font-weight:700;cursor:pointer}.btn:disabled{opacity:.6;cursor:not-allowed}.btn-primary{background:var(--accent);color:#fff}.btn-light{background:#fff;border:1px solid var(--line);color:var(--text)}
+.notice{display:none;margin-bottom:16px;padding:12px 14px;border-radius:10px;font-size:14px}.notice.ok{display:block;background:#ecfdf5;color:#166534;border:1px solid #bbf7d0}.notice.error{display:block;background:#fef2f2;color:#991b1b;border:1px solid #fecaca}.notice.info{display:block;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}
+.group{background:var(--card);border:1px solid var(--line);border-radius:16px;margin-bottom:16px;overflow:hidden}.group-head{padding:16px 18px;background:#f8fafc;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;align-items:center}.group-head h2{font-size:18px;margin:0}.tag{font-size:12px;font-weight:700;padding:6px 9px;border-radius:999px;background:#eff6ff;color:#1d4ed8;white-space:nowrap}
+.item{padding:18px;border-bottom:1px solid var(--line)}.item:last-child{border-bottom:0}.item-grid{display:grid;grid-template-columns:1.35fr .85fr .9fr;gap:16px;align-items:start}.item h3{margin:0 0 7px;font-size:16px}.desc{color:var(--muted);font-size:14px;line-height:1.5}.need{margin-top:10px;padding:11px 12px;background:#f8fafc;border-radius:10px;font-size:14px;line-height:1.45}.need b{display:block;margin-bottom:4px}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700}.field select,.field input,.field textarea{width:100%;border:1px solid #d1d5db;border-radius:9px;padding:10px;background:#fff;color:var(--text);font:inherit}.field textarea{min-height:105px;resize:vertical}.stack{display:grid;gap:10px}.status-line{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:12px}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}.footer{color:var(--muted);font-size:12px;text-align:center;padding:14px 0 30px}.loading{padding:28px;text-align:center;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:14px}
+@media(max-width:850px){.summary{grid-template-columns:repeat(2,1fr)}.item-grid{grid-template-columns:1fr}.container{padding:12px}.header h1{font-size:24px}.group-head{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Checklist de Integração Laboratorial</h1>
+    <p>Controle compartilhado da TI do hospital. As alterações são salvas no Supabase e ficam disponíveis para todos que acessarem o site.</p>
+    <div class="connection"><span class="connection-dot" id="connectionDot"></span><span id="connectionText">Conectando ao banco...</span></div>
+  </div>
+
+  <div class="summary">
+    <div class="sum"><b id="total">0</b><span>Total de itens</span></div>
+    <div class="sum"><b id="done">0</b><span>Concluídos</span></div>
+    <div class="sum"><b id="pending">0</b><span>Pendentes</span></div>
+    <div class="sum"><b id="progress">0%</b><span>Progresso</span></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn btn-primary" id="saveBtn">Salvar alterações</button>
+    <button class="btn btn-light" id="reloadBtn">Atualizar dados</button>
+    <button class="btn btn-light" id="exportBtn">Exportar CSV</button>
+  </div>
+
+  <div id="notice" class="notice"></div>
+  <div id="app"><div class="loading">Carregando checklist...</div></div>
+  <div class="footer">Dados compartilhados via Supabase.</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://wgaozubitxsvtplgmrwm.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Jjwv6skjlx6d4PYvGbrkvA_E8kn7SAc';
+const TABLE = 'checklist_integracao';
+
+const groups = [
+  {title:'1. Tomcat de integração', owner:'MV + TI Hospital', items:[
+    ['Disponibilizar servidor/ambiente para instalação','Definir qual servidor será usado e garantir que a MV consiga acessá-lo.'],
+    ['Liberar acesso para a MV','Criar ou liberar o acesso necessário para a equipe da MV.'],
+    ['Confirmar ambiente de homologação e produção','Informar quais servidores correspondem à homologação e à produção.']
+  ]},
+  {title:'2. Ambiente de homologação', owner:'TI Hospital + MV', items:[
+    ['Confirmar ambiente de teste disponível','Validar se existe ambiente de homologação/treinamento funcionando.'],
+    ['Confirmar que homologação está compatível com produção','Pedir à equipe responsável pelo MV/DBA para confirmar se o ambiente está atualizado.']
+  ]},
+  {title:'3. Exames, analitos e laudos', owner:'TI Hospital + MV + Novo Laboratório', items:[
+    ['Levantar lista de exames cadastrados no MV','Solicitar ou gerar uma relação com os códigos e nomes dos exames cadastrados no MV.'],
+    ['Levantar analitos/campos dos exames','Disponibilizar os campos/analitos usados nos exames que serão integrados.'],
+    ['Disponibilizar modelos de laudos','Separar exemplos ou modelos dos laudos usados atualmente.'],
+    ['Acompanhar o DE/PARA','Garantir que o fornecedor novo recebeu a lista do MV e validar quem ficará responsável pelo DE/PARA.']
+  ]},
+  {title:'4. Aplicação de integração', owner:'MV', items:[
+    ['Confirmar se será SoulIntegra ou MVIntegra','Perguntar à MV qual aplicação será usada no hospital.'],
+    ['Instalar/configurar a aplicação de integração','Da TI do hospital: liberar o ambiente e os acessos necessários.']
+  ]},
+  {title:'5. Endpoints do novo laboratório', owner:'Novo Laboratório + MV', items:[
+    ['Receber endpoint de homologação','Cobrar do fornecedor do novo laboratório e encaminhar para a MV.'],
+    ['Receber endpoint de produção','Cobrar do fornecedor do novo laboratório e encaminhar para a MV.'],
+    ['Receber IP e porta, se aplicável','Solicitar ao fornecedor e repassar para infraestrutura/rede.']
+  ]},
+  {title:'6. Liberação de comunicação / Firewall', owner:'TI Hospital + TI Novo Laboratório', items:[
+    ['Liberar comunicação do hospital para o laboratório','Após receber IP/porta/endereço, solicitar a liberação à infraestrutura/rede.'],
+    ['Confirmar liberação do lado do laboratório','Cobrar confirmação do fornecedor de que o lado deles está liberado.'],
+    ['Testar comunicação','Agendar teste com MV + infraestrutura + fornecedor.']
+  ]},
+  {title:'7. Acessos para homologação', owner:'TI Hospital', items:[
+    ['Acesso ao banco','Disponibilizar usuário/acesso conforme orientação da MV.'],
+    ['Acesso ao servidor de aplicação','Liberar acesso para a equipe responsável.'],
+    ['Acesso ao ERP MV de homologação','Garantir usuário e acesso funcionando.'],
+    ['Acesso ao ERP MV de produção','Garantir usuário e acesso quando chegar a fase de produção.'],
+    ['SQLTools na máquina de homologação','Confirmar se já existe ou solicitar instalação.']
+  ]},
+  {title:'8. Homologação e virada', owner:'Todos', items:[
+    ['Agendar homologação','Definir data, participantes e responsável por cada lado.'],
+    ['Testar envio da solicitação','Executar casos de teste e registrar evidências.'],
+    ['Testar retorno do resultado','Validar resultado no prontuário/PEP e registrar problemas.'],
+    ['Definir tratamento dos pedidos antigos','Definir com MV e fornecedores como serão tratados exames pendentes na data da virada.'],
+    ['Agendar entrada em produção','Definir data da virada e responsáveis de plantão para suporte.']
+  ]}
+];
+
+const meta = {};
+for(const g of groups){ for(const [name,need] of g.items){ meta[name]={group:g.title,owner:g.owner,need}; } }
+
+let rows=[];
+const app=document.getElementById('app');
+const saveBtn=document.getElementById('saveBtn');
+const reloadBtn=document.getElementById('reloadBtn');
+const exportBtn=document.getElementById('exportBtn');
+
+function headers(extra={}){return {'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json',...extra};}
+function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function setConnection(ok,text){document.getElementById('connectionText').textContent=text;document.getElementById('connectionDot').style.background=ok?'#22c55e':'#ef4444';}
+function showNotice(message,type='info'){const el=document.getElementById('notice');el.className='notice '+type;el.textContent=message;if(type==='ok')setTimeout(()=>{if(el.textContent===message){el.className='notice';el.textContent='';}},3500);}
+function normalizeStatus(v){v=String(v||'').trim().toLowerCase();if(['concluído','concluido'].includes(v))return'Concluído';if(v==='em andamento')return'Em andamento';if(v.includes('aguardando'))return'Aguardando terceiro/MV';if(['não se aplica','nao se aplica'].includes(v))return'Não se aplica';return'Não iniciado';}
+
+function itemHTML(row){
+  const m=meta[row.item]||{need:'Atualize o status, responsável, prazo e observações.'};
+  const st=normalizeStatus(row.status);
+  return `<div class="item" data-id="${row.id}">
+    <div class="item-grid">
+      <div>
+        <h3>${esc(row.item)}</h3>
+        <div class="desc">${esc(row.descricao||'')}</div>
+        <div class="need"><b>O que precisa de mim / TI Hospital:</b>${esc(m.need)}</div>
+        <div class="status-line"><span class="dot" id="dot_${row.id}"></span><span id="label_${row.id}">${esc(st)}</span></div>
+      </div>
+      <div class="stack">
+        <div class="field"><label>Status</label><select id="status_${row.id}" class="status-input">
+          <option ${st==='Não iniciado'?'selected':''}>Não iniciado</option>
+          <option ${st==='Em andamento'?'selected':''}>Em andamento</option>
+          <option ${st==='Aguardando terceiro/MV'?'selected':''}>Aguardando terceiro/MV</option>
+          <option ${st==='Concluído'?'selected':''}>Concluído</option>
+          <option ${st==='Não se aplica'?'selected':''}>Não se aplica</option>
+        </select></div>
+        <div class="field"><label>Responsável</label><input id="resp_${row.id}" value="${esc(row.responsavel||'')}" placeholder="Nome ou equipe"></div>
+        <div class="field"><label>Prazo/Data</label><input id="date_${row.id}" type="date" value="${esc(row.prazo||'')}"></div>
+      </div>
+      <div class="field"><label>Observações / o que falta</label><textarea id="note_${row.id}" placeholder="Ex.: aguardando retorno da MV...">${esc(row.observacao||'')}</textarea></div>
+    </div>
+  </div>`;
+}
+
+function render(){
+  if(!rows.length){app.innerHTML='<div class="loading">Nenhum item encontrado.</div>';updateSummary();return;}
+  app.innerHTML='';
+  for(const g of groups){
+    const names=new Set(g.items.map(x=>x[0]));
+    const groupRows=rows.filter(r=>names.has(r.item));
+    if(!groupRows.length)continue;
+    const wrap=document.createElement('section');wrap.className='group';
+    wrap.innerHTML=`<div class="group-head"><h2>${esc(g.title)}</h2><span class="tag">${esc(g.owner)}</span></div>`+groupRows.map(itemHTML).join('');
+    app.appendChild(wrap);
+  }
+  const known=new Set(groups.flatMap(g=>g.items.map(x=>x[0])));
+  const extra=rows.filter(r=>!known.has(r.item));
+  if(extra.length){const wrap=document.createElement('section');wrap.className='group';wrap.innerHTML='<div class="group-head"><h2>Outros itens</h2><span class="tag">Projeto</span></div>'+extra.map(itemHTML).join('');app.appendChild(wrap);}
+  document.querySelectorAll('.status-input').forEach(el=>el.addEventListener('change',updateSummary));
+  updateSummary();
+}
+
+async function loadData(){
+  saveBtn.disabled=true;reloadBtn.disabled=true;showNotice('Carregando dados compartilhados...','info');
+  try{const res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=id.asc`,{headers:headers()});if(!res.ok)throw new Error(`${res.status}: ${await res.text()}`);rows=await res.json();setConnection(true,'Conectado ao Supabase');document.getElementById('notice').className='notice';document.getElementById('notice').textContent='';render();}
+  catch(e){console.error(e);setConnection(false,'Não foi possível conectar');showNotice('Não foi possível carregar os dados.','error');app.innerHTML='<div class="loading">Falha ao carregar o checklist.</div>';}
+  finally{saveBtn.disabled=false;reloadBtn.disabled=false;}
+}
+
+async function saveAll(){
+  if(!rows.length)return;saveBtn.disabled=true;reloadBtn.disabled=true;showNotice('Salvando alterações...','info');
+  try{for(const row of rows){const payload={responsavel:document.getElementById('resp_'+row.id).value.trim()||null,status:document.getElementById('status_'+row.id).value,prazo:document.getElementById('date_'+row.id).value||null,observacao:document.getElementById('note_'+row.id).value.trim()||null};const res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',headers:headers({'Prefer':'return=minimal'}),body:JSON.stringify(payload)});if(!res.ok)throw new Error(`${res.status}: ${await res.text()}`);}setConnection(true,'Conectado ao Supabase');showNotice('Alterações salvas.','ok');await loadData();}
+  catch(e){console.error(e);setConnection(false,'Erro ao salvar');showNotice('Não foi possível salvar as alterações.','error');}
+  finally{saveBtn.disabled=false;reloadBtn.disabled=false;}
+}
+
+function updateSummary(){let total=0,done=0,pending=0;document.querySelectorAll('.item[data-id]').forEach(el=>{total++;const id=el.dataset.id;const st=document.getElementById('status_'+id).value;if(st==='Concluído'||st==='Não se aplica')done++;else pending++;const map={'Não iniciado':'#9ca3af','Em andamento':'#d97706','Aguardando terceiro/MV':'#2563eb','Concluído':'#16a34a','Não se aplica':'#6b7280'};document.getElementById('dot_'+id).style.background=map[st];document.getElementById('label_'+id).textContent=st;});document.getElementById('total').textContent=total;document.getElementById('done').textContent=done;document.getElementById('pending').textContent=pending;document.getElementById('progress').textContent=total?Math.round(done/total*100)+'%':'0%';}
+
+function exportCSV(){const out=[['Grupo','Item','Status','Responsável','Prazo','Observações']];document.querySelectorAll('.item[data-id]').forEach(el=>{const id=el.dataset.id;const row=rows.find(r=>String(r.id)===String(id));out.push([meta[row.item]?.group||'Outros',row.item,document.getElementById('status_'+id).value,document.getElementById('resp_'+id).value,document.getElementById('date_'+id).value,document.getElementById('note_'+id).value]);});const csv=out.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='checklist_integracao_laboratorial.csv';a.click();URL.revokeObjectURL(a.href);}
+
+saveBtn.addEventListener('click',saveAll);reloadBtn.addEventListener('click',loadData);exportBtn.addEventListener('click',exportCSV);loadData();
+</script>
+</body>
+</html>
